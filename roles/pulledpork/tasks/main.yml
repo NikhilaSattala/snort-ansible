@@ -1,0 +1,85 @@
+#- hosts: snortserver
+
+#  tasks:
+    - name: Install PulledPork pre-requisites
+      apt: name={{item}} state=installed
+      become: yes
+      with_items:
+      - libcrypt-ssleay-perl 
+      - liblwp-useragent-determined-perl
+
+    - name: Download Pulledpork
+      get_url:
+        url: https://github.com/finchy/pulledpork/archive/{{pulledpork_tarball}}.tar.gz 
+        dest: /tmp/pulledpork-{{pulledpork_version}}.tar.gz
+
+    - name: Untar Pulledpork
+      become: yes
+      unarchive: src=/tmp/pulledpork-{{pulledpork_version}}.tar.gz
+                 dest=/opt/snort-src
+                 copy=no mode=0755
+                 #copy=no owner=flexiadmin group=flexiadmin mode=0755
+      register: untar_pulledpork
+
+    - name: Rename pulledpork folder
+      become: yes
+      command: "mv /opt/snort-src/pulledpork-{{pulledpork_tarball}} /opt/snort-src/pulledpork-{{pulledpork_version}}"
+      when: untar_pulledpork.changed
+
+    - name: Copy binary file
+      become: yes
+      command: "cp /opt/snort-src/pulledpork-{{pulledpork_version}}/pulledpork.pl /usr/local/bin/pulledpork.pl"
+      when: untar_pulledpork.changed
+      register: copy_binary
+    
+    - name: Execute permissions
+      file: path=/usr/local/bin/pulledpork.pl mode="755"
+      when: copy_binary.changed
+
+    - name: Copy config files
+      become: yes
+      command: "cp /opt/snort-src/pulledpork-{{pulledpork_version}}/etc/{{item}} /etc/snort"
+      with_items: 
+      - disablesid.conf
+      - dropsid.conf
+      - enablesid.conf
+      - modifysid.conf
+      when: untar_pulledpork.changed
+      register: copy_config
+
+    - name: Setup permissions for config files
+      become: yes
+      file: path=/etc/snort/{{item}} owner=snort group=snort mode="755"
+      with_items:
+      - disablesid.conf
+      - dropsid.conf
+      - enablesid.conf
+      - modifysid.conf
+      when: copy_config.changed
+
+    - name: Configuring Pulledpork 
+      become: yes
+      template:
+        src: "../templates/etc/pulledpork.conf.j2"
+        dest: "/etc/snort/pulledpork.conf"
+        owner: snort
+        group: snort
+        mode: 0644
+
+    - name: Execute pulled pork
+      become: yes
+      command: "/usr/local/bin/pulledpork.pl -c /etc/snort/pulledpork.conf -l"
+
+    - name: Update snort.conf with snort.rules
+      become: yes
+      blockinfile:
+        dest: /etc/snort/snort.conf
+        block: |
+           include $RULE_PATH/snort.rules
+
+    - include: ../../snort/tasks/validate_snort.yml
+      static: yes
+
+    #- name: Start Snort service
+    #  notify:
+    #  - Start Snort

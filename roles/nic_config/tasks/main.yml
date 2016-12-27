@@ -1,0 +1,22 @@
+ - name: Install ethtool
+   become: yes
+   apt: name=ethtool state=installed
+
+ - name: NIC configurations
+   become: yes
+   blockinfile:
+     dest: /etc/network/interfaces
+     block: |
+        post-up ethtool -K eth0 gro off
+        post-up ethtool -K eth0 lro off
+
+## Requires Manual restart of network ethernet interfaces,
+## else will loose connectivity after executing ifconfig eth0 down
+
+#    - name: Restart network interfaces
+#      become: yes
+#      command: ifconfig {{snort_interface}} {{item}}
+#      with_items:
+#      - down
+#      - up
+

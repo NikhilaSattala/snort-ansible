@@ -1,0 +1,91 @@
+#- hosts: snortserver
+
+#  tasks:
+    - name: Install Phusion Passenger pre-requisites
+      apt: name={{item}} state=installed
+      become: yes
+      with_items:
+      - libcurl4-openssl-dev
+      - apache2-threaded-dev
+      - libaprutil1-dev
+      - libapr1-dev
+
+    - name: Install Passenger
+      become: yes
+      gem: name=passenger state=present user_install=no
+
+    - name: Find Passenger root
+      command: passenger-config --root
+      register: passenger_root
+
+    - name: Find Passenger module
+      stat: path={{ passenger_root.stdout }}/buildout/apache2/mod_passenger.so
+      register: module
+
+    - name: Install Apache2 module
+      become: yes
+      command: "passenger-install-apache2-module"
+      when: module.stat.exists != True
+
+    - name: Load Passenger module
+      become: yes
+      template:
+        src: "../templates/etc/passenger.load.j2"
+        dest: "/etc/apache2/mods-available/passenger.load"
+        #owner: snort
+        #group: snort
+        #mode: 0755
+
+    - name: Configure Passenger module
+      become: yes
+      template:
+        src: "../templates/etc/passenger.conf.j2"
+        dest: "/etc/apache2/mods-available/passenger.conf"
+
+    - name: Enable Passenger module
+      become: yes
+      command: "{{ item }}"
+      with_items:
+      - 'a2enmod passenger'
+      notify:
+      - Restart Apache2
+      register: enable_passenger 
+   
+    - name: Create Snorby Website
+      become: yes
+      template:
+        src: "../../snorby/templates/etc/snorby.conf.j2"
+        dest: "/etc/apache2/sites-available/snorby.conf"
+      when: enable_passenger.changed
+      register: create_new_website
+
+    - name: Enable new website
+      become: yes
+      command: chdir="/etc/apache2/sites-available/" {{item}}
+      with_items:
+      - 'a2ensite snorby.conf'
+      notify:
+      - Reload Apache2
+      #when: create_new_website.changed
+      register: enable_new_website
+
+    - meta: flush_handlers
+
+    - name: Disable default website
+      become: yes
+      command: chdir="/etc/apache2/sites-enabled"  {{item}}
+      with_items:
+      - 'a2dissite 000-default'
+      notify:
+      - Reload Apache2
+      - Start Barnyard2 
+      #when: enable_new_website.changed
+
+    - name: Snorby workers for database maintenance
+      become: yes
+      template:
+        src: "../templates/etc/init/snorby_worker.conf.j2"
+        dest: "/etc/init/snorby_worker.conf"
+        mode: "755"
+      notify:
+      - Start Snorby worker 

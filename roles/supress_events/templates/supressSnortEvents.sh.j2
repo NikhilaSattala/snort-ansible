@@ -1,0 +1,117 @@
+#!/bin/bash -x
+###############################################################################
+# Description: Supresses events from Snorby and updates DB.                   #
+#                                                                             #
+# Usage: ./supressSnortEvents.sh -s <sig_name> -g <gen_id> -i <sig_id>        #
+#                                                                             #
+#                                                                             #
+###############################################################################
+
+MYSQL_USER='root'
+MYSQL_PASSWORD={{mysql_root_password}}
+FULL_SIG_NAME=''
+SIG_INPUT=''
+GID=''
+SID=''
+
+function usage(){
+  echo "Usage: $0 -s <sig_name> -g <gen_id> -i <sig_id>" 1>&2; exit 1;
+}
+
+function abort(){
+  echo "$1"; exit 1;
+}
+
+function stop_snorby_worker(){
+  cd /var/www/html/snorby-2.6.2/
+  sudo RAILS_ENV=production bundle exec rails c <<-EORUBY
+  Snorby::Worker.stop
+  Snorby::Jobs.clear_cache(true)
+  exit
+EORUBY
+}
+
+function start_services() {
+  service snort start
+  [[ $? -ne 0 ]] && abort "[ERROR] Snort failed to start !!!"
+  service barnyard2 start
+  [[ $? -ne 0 ]] && abort "[ERROR] Barnyard2 failed to start !!!"
+}
+
+function start_snorby_worker(){
+  start_services
+  cd /var/www/html/snorby-2.6.2/
+  sudo RAILS_ENV=production bundle exec rails c <<-EORUBY
+  Snorby::Jobs.clear_cache(true)
+  Snorby::Jobs::SensorCacheJob.new(true).perform
+  Snorby::Jobs::DailyCacheJob.new(true).perform
+  Snorby::Worker.start
+  exit
+EORUBY
+}
+
+function stop_services() {
+  service snort stop
+  [[ $? -ne 0 ]] && abort "[ERROR] Snort failed to stop !!!"
+  service barnyard2 stop
+  [[ $? -ne 0 ]] && abort "[ERROR] Barnyard2 failed to stop !!!"
+}
+
+function disable_sigature(){
+  echo $GID:$SID >> /etc/snort/disablesid.conf
+  echo "suppress gen_id $GID, sig_id $SID" >> /etc/snort/threshold.conf
+
+  #service snort restart
+  #[[ $? -ne 0 ]] && abort "[ERROR] Snort restart failed !!!"
+  echo "[INFO] Signature - $FULL_SIG_NAME suppressed."
+}
+
+function remove_events_from_db(){
+  SIG_NAME=$1
+  mysql -u$MYSQL_USER -p$MYSQL_PASSWORD -se \
+  "
+  use snorby;
+  TRUNCATE snorby.delayed_jobs;
+  SELECT e.sid, e.signature, s.sig_name, count(s.sig_name) as sig_counts FROM snorby.event e JOIN snorby.signature s ON e.signature = s.sig_id GROUP BY s.sig_name ORDER BY sig_counts DESC;
+  DELETE FROM sd, se, si, ss, st USING snorby.data sd INNER JOIN snorby.event se INNER JOIN snorby.iphdr si INNER JOIN snorby.signature ss INNER JOIN snorby.tcphdr st WHERE sd.cid=se.cid AND se.signature=ss.sig_id AND se.cid=si.cid AND (ss.sig_name = '$SIG_NAME') AND se.cid=st.cid;
+  DELETE FROM sd, se, si, ss, st USING snorby.data sd INNER JOIN snorby.event se INNER JOIN snorby.iphdr si INNER JOIN snorby.signature ss INNER JOIN snorby.tcphdr st WHERE sd.cid=se.cid AND se.signature=ss.sig_id AND se.cid=si.cid AND (ss.sig_name = '$SIG_NAME') AND se.cid=st.cid;
+  DELETE FROM se, si, ss, st USING snorby.event se INNER JOIN snorby.iphdr si INNER JOIN snorby.signature ss INNER JOIN snorby.tcphdr st WHERE se.signature=ss.sig_id AND se.cid=si.cid AND (ss.sig_name = '$FULL_SIG_NAME') AND se.cid=st.cid;
+  exit
+  "
+}
+### MAIN ###
+
+if (($# == 0)); then
+  usage
+fi
+
+while getopts ":s:g:i:" o; do
+ case "${o}" in
+     s)
+         SIG_INPUT=${OPTARG}
+         ;;
+     g)
+         GID=${OPTARG}
+         ;;
+     i)
+         SID=${OPTARG}
+         ;;
+     *)
+         usage
+         ;;
+ esac
+done
+
+stop_services
+
+disable_sigature
+
+stop_snorby_worker
+
+FULL_SIG_NAME=$(mysql -u$MYSQL_USER -p$MYSQL_PASSWORD snorby -sNe  "SELECT sig_name FROM signature WHERE sig_name LIKE '%$SIG_INPUT%';")
+echo "[INFO]: Signature name : $FULL_SIG_NAME"
+
+remove_events_from_db $FULL_SIG_NAME
+
+start_snorby_worker
+exit 0

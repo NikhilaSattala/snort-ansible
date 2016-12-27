@@ -1,0 +1,7 @@
+    - name: Start Postfix 
+      become: yes
+      service: name=postfix state=started
+
+    - name: Start Swatch
+      become: yes
+      service: name=swatch state=started

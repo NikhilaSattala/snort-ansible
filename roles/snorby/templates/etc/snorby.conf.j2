@@ -1,0 +1,11 @@
+<VirtualHost *:80>
+	ServerAdmin webmaster@localhost
+	ServerName snorby.sublimerobots.com
+	DocumentRoot /var/www/html/snorby-{{snorby_version}}/public
+	<Directory "/var/www/html/snorby-{{snorby_version}}/public">
+		AllowOverride all
+		Order deny,allow
+		Allow from all
+		Options -MultiViews
+	</Directory>
+</VirtualHost>

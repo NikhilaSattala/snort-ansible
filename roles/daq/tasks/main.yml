@@ -1,0 +1,45 @@
+#- hosts: snortserver
+
+  #tasks:
+    - name: Install Snort pre-requisites
+      become: yes
+      apt: name={{item}} state=installed
+      with_items:
+      - "build-essential"
+      - "libpcap-dev"
+      - "libpcre3-dev"
+      - "libdumbnet-dev"
+      - "bison"
+      - "flex"
+      - "zlib1g-dev"
+      - "liblzma-dev"
+      - "openssl"
+      - "libssl-dev"
+
+    - name: Create Snort source directory
+      become: yes
+      file: path=/opt/snort-src state=directory
+
+    - name: Download DAQ
+      become: yes
+      get_url:
+        url: https://www.snort.org/downloads/snort/daq-{{daq_version}}.tar.gz
+        dest: /tmp/
+      register: download_daq
+
+    - name: Untar DAQ
+      become: yes
+      unarchive: src=/tmp/daq-{{daq_version}}.tar.gz
+                 dest=/opt/snort-src
+                 copy=no
+      when: download_daq.changed
+      register: untar_daq
+
+    - name: Configure DAQ
+      command: chdir=/opt/snort-src/daq-{{daq_version}} {{item}}
+      become: yes
+      with_items:
+      - "./configure"
+      - "/usr/bin/make"
+      - "/usr/bin/make install"
+      when: untar_daq.changed

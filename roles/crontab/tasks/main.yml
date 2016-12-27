@@ -1,0 +1,21 @@
+#Cronjob to pull Security rules weekly from Snort community
+  - name: Creates pulledpork cronjob
+    become: yes
+    cron: minute="30" hour="4" weekday="sun"
+          name="Pull Snort Security rules"
+          user="root"
+          job="/usr/local/bin/pulledpork.pl -c /etc/snort/pulledpork.conf -l"
+
+  - name: Creates cronjob for cleanup event logs
+    become: yes
+    template:
+        src: "../templates/cleanup.sh"
+        dest: "/root/cleanup.sh"
+        mode: 755
+
+  - name: Creates cronjob for cleanup archived Snort logs
+    become: yes
+    cron: minute="00" hour="4" weekday="sun"
+          name="Cleanup archived logs"
+          user="root"
+          job="/root/cleanup.sh"

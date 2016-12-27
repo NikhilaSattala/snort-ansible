@@ -1,0 +1,94 @@
+#- hosts: snortserver 
+
+#  tasks:
+    - name: Install Barnyard2 pre-requisites
+      apt: name={{item}} state=installed
+      become: yes
+      with_items:
+      - mysql-server 
+      - libmysqlclient-dev
+      - mysql-client
+      - python-mysqldb
+      - autoconf
+      - libtool
+
+    - name: Download Barnyard2
+      get_url: 
+        url: https://github.com/firnsy/barnyard2/archive/{{barnyard2_tarball}}.tar.gz
+        dest: /tmp/barnyard2-{{barnyard2_version}}.tar.gz
+      #register: download_barnyard2
+
+    - name: Untar Barnyard2 
+      become: yes
+      unarchive: src=/tmp/barnyard2-{{barnyard2_version}}.tar.gz
+                 dest=/opt/snort-src
+                 copy=no mode=0755
+                 #copy=no owner=flexiadmin group=flexiadmin mode=0755
+      #when: download_barnyard2.changed
+      #register: untar_barnyard2
+
+    - name: Rename barnyard2 folder
+      become: yes
+      command: mv /opt/snort-src/barnyard2-{{barnyard2_tarball}} /opt/snort-src/barnyard2-{{barnyard2_version}}
+      #when: untar_barnyard2.changed
+      register: rename_barnyard2
+
+    - name: Install Barnyard2
+      become: yes
+      command: chdir=/opt/snort-src/barnyard2-{{barnyard2_version}} {{ item }}
+      with_items:
+      - "autoreconf -fvi -I ./m4"
+      when: rename_barnyard2.changed
+      register: install_barnyard2
+
+    - name: Create symlink
+      file: src=/usr/include/dumbnet.h dest=/usr/include/dnet.h state=link
+      become: yes
+
+    - name: Configure Barnyard2
+      command: chdir=/opt/snort-src/barnyard2-{{barnyard2_version}} {{ item }}
+      become: yes
+      with_items:
+      - "ldconfig"
+      - "./configure --with-mysql --with-mysql-libraries=/usr/lib/x86_64-linux-gnu"
+      - "/usr/bin/make"
+      - "/usr/bin/make install" 
+      when: install_barnyard2.changed
+      register: configure_barnyard2
+
+    - name: Create Barnyard2 Log Directory
+      become: yes
+      file: path=/var/log/barnyard2 state=directory owner=snort group=snort mode=5775
+
+    - name: Create Barnyard2.waldo File
+      become: yes
+      file: path=/var/log/snort/barnyard2.waldo state=touch owner=snort group=snort mode=775
+      when: configure_barnyard2.changed
+
+    - name: Copy Config file
+      become: yes
+      command: cp /opt/snort-src/barnyard2-{{barnyard2_version}}/etc/barnyard2.conf /etc/snort/barnyard2.conf
+
+    - name: Barnyard2 Startup script
+      become: yes
+      template:
+        src: "../templates/etc/init/barnyard2.conf.j2"
+        dest: "/etc/init/barnyard2.conf"
+        owner: snort
+        group: snort
+        mode: 0755
+
+    - name: Update barnyard2.conf file with Snorby DB info
+      become: yes
+      blockinfile:
+        dest: /etc/snort/barnyard2.conf
+        block: |
+          output database: log, mysql, user={{mysql_snorby_user}} password={{mysql_snorby_password}} dbname={{mysql_snorby_db}} host=127.0.0.1 sensor_name=sensor1
+      when: configure_barnyard2.changed
+      register: update_conf
+      #notify: Start Barnyard2 
+
+    - name: Restrict other users reading barnyard2.conf
+      become: yes
+      file: path=/etc/snort/barnyard2.conf owner=snort group=snort mode=750
+      when: update_conf.changed 

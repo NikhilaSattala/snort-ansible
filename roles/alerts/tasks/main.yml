@@ -1,0 +1,102 @@
+### REPORTS
+# Install Postfix
+
+# Configure Postfix
+# Update postfix/main.cf and create sasl_passwd file
+# apt install mailutils
+# execute command postmap /etc/postfix/sasl_passwd to create sasl_passwd.db
+#
+
+# configure aliases /etc/root
+
+# NOT NEEDED: configure snorby /var/www/html/snorby-version/config/initializers/mail_config.rb
+
+
+### HIGH ALERTS
+# Uncomment output alert_fast: /var/log/snort/alert line from
+# /etc/snort/barnyard2.conf
+
+# Install swatch - apt-get install swatch 
+
+# configure swatchrc and /etc/init/swatch.conf
+
+    - name: Install Postfix and Swatch
+      apt: name={{item}} state=installed
+      become: yes
+      with_items:
+      - postfix
+      - mailutils
+      - swatch
+
+    - name: Configure postfix
+      become: yes
+      template:
+        src: "../templates/etc/main.cf.j2"
+        dest: "/etc/postfix/main.cf"
+        owner: snort
+        group: snort
+        mode: 0755
+
+    - name: Configure postfix - update smtp server
+      become: yes
+      lineinfile:
+        dest: /etc/postfix/main.cf
+        regexp: '^relayhost ='
+        line: 'relayhost = [smtp.gmail.com]:587'
+
+    - name: Configure postfix
+      become: yes
+      blockinfile:
+        dest: /etc/postfix/main.cf
+        block: |
+          smtp_sasl_auth_enable = yes
+          smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+          smtp_sasl_security_options = noanonymous
+          smtp_use_tls = yes
+
+    - name: Create sasl_passwd file
+      become: yes
+      template:
+        src: "../templates/etc/sasl_passwd.j2"
+        dest: "/etc/postfix/sasl_passwd"
+        mode: 0700
+      register: sasl_passwd
+
+    - name: Create sasl_passwd.db
+      become: yes
+      command: postmap /etc/postfix/sasl_passwd
+
+    - name: Configure aliases
+      become: yes
+      blockinfile:
+        dest: /etc/aliases
+        block: |
+          root: {{recipient_mailid}}
+
+    - name: Configure alert_fast plugin in barnyard2.conf
+      become: yes
+      blockinfile:
+        dest: /etc/snort/barnyard2.conf
+        block: |
+          output alert_fast: /var/log/snort/alert
+
+    - name: Configure swatchrc
+      become: yes
+      template:
+        src: "../templates/etc/swatchrc.j2"
+        dest: "/etc/swatchrc"
+        owner: snort
+        group: snort
+        mode: 0755
+
+    - name: Configure swatch init script
+      become: yes
+      template:
+        src: "../templates/etc/init/swatch.conf.j2"
+        dest: "/etc/init/swatch.conf"
+        owner: snort
+        group: snort
+        mode: 0755
+      notify:
+      - Start Postfix
+      - Start Swatch

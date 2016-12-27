@@ -1,0 +1,105 @@
+#- hosts: snortserver
+
+#  tasks:
+    - name: Install Snorby pre-requisites
+      apt: name={{item}} state=installed
+      become: yes
+      with_items:
+      - imagemagick 
+      - apache2 
+      - libyaml-dev 
+      - libxml2-dev 
+      - libxslt-dev 
+      - git 
+      - ruby1.9.3
+
+    - name: Prevent documentation installation
+      become: yes
+      command: "{{ item }}"
+      with_items:
+      - "echo 'gem: --no-rdoc --no-ri' > ~/.gemrc"
+      - "sh -c 'echo gem: --no-rdoc --no-ri > /etc/gemrc'"
+
+    - name: Install required gems
+      become: yes
+      gem: name={{item}} state=present user_install=no
+      with_items:
+      - wkhtmltopdf
+      - bundler
+
+    - name: Install compatible rails 
+      become: yes
+      gem: name=rails version={{rails_version}} state=present user_install=no
+
+    - name: Install compatible rake
+      become: yes
+      gem: name=rake version={{rake_version}} state=present 
+
+    - name: Download Snorby 
+      get_url:
+        url: https://github.com/Snorby/snorby/archive/v{{snorby_version}}.tar.gz 
+        dest: /tmp/snorby-{{snorby_version}}.tar.gz
+      register: download_snorby 
+
+    - name: Untar Snorby
+      become: yes
+      unarchive: src=/tmp/snorby-{{snorby_version}}.tar.gz
+                 dest=/opt/snort-src
+                 copy=no mode=0755
+                 #copy=no owner=flexiadmin group=flexiadmin mode=0755
+      #when: download_snorby.changed
+      #register: untar_snorby
+
+    - name: Move Snorby to Webserver directory
+      become: yes
+      command: "cp -r /opt/snort-src/snorby-{{snorby_version}}/ /var/www/html/snorby-{{snorby_version}}/"
+      #when: untar_snorby.changed
+
+    - name: Install bundle
+      become: yes
+      command: chdir=/var/www/html/snorby-{{snorby_version}} {{item}}
+      with_items:
+      - bundle install
+      #when: untar_snorby.changed
+      register: install_bundle
+
+    - name: Update root_database.yml
+      become: yes
+      template:
+        src: "../templates/etc/root_database.yml.j2"
+        dest: "/var/www/html/snorby-{{snorby_version}}/config/database.yml"
+        owner: snort
+        group: snort
+        mode: 0755
+      when: install_bundle.changed
+      register: update_database
+
+    - name: Update Snorby configuration file
+      become: yes
+      template:
+        src: "../templates/etc/snorby_config.yml.j2"
+        dest: "/var/www/html/snorby-{{snorby_version}}/config/snorby_config.yml"
+      when: install_bundle.changed
+
+    - name: Install Snorby
+      become: yes
+      command: chdir=/var/www/html/snorby-{{snorby_version}} {{item}}
+      with_items: 
+      - 'bundle exec rake snorby:setup'
+      when: update_database.changed
+      register: install_snorby
+      #notify : mysql handler 
+
+    - name: Update database.yml with snorby info
+      become: yes
+      template:
+        src: "../templates/etc/snorby_database.yml.j2"
+        dest: "/var/www/html/snorby-{{snorby_version}}/config/database.yml"
+        owner: snort
+        group: snort
+        mode: 0755
+      when: install_snorby.changed
+
+    # start Snorby as follows,-- REMOVE : snorby will be started by passenger
+    # cd /var/www/html/snorby/
+    # sudo bundle exec rails server -e production

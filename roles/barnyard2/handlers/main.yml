@@ -1,0 +1,3 @@
+    - name: Start Barnyard2
+      become: yes
+      service: name=barnyard2 state=started

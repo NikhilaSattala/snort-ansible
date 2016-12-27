@@ -1,0 +1,31 @@
+#- hosts: snortserver
+
+#  tasks:
+     # MySQL Security Setup
+     - name: Copy .my.cnf file with root password credentials
+       template: src=my.cnf.j2 dest=~/.my.cnf mode=0600
+       #notify:
+       #- restart mysql
+
+     - name: Updates mysql root password for all root accounts
+       mysql_user: name=root host={{ item }} password={{ mysql_root_password }} login_user=root login_password={{ mysql_root_password }} check_implicit_admin=yes
+       with_items:
+       - "{{ ansible_hostname }}"
+       - 127.0.0.1
+       - ::1
+       - localhost
+
+     - name: Ensures anonymous users are not in the database
+       mysql_user: name='' host={{ item }} state=absent
+       with_items:
+       - localhost
+       - "{{ ansible_hostname }}"
+
+     - name: Removes the test database
+       mysql_db: name=test state=absent
+
+     - name: Create Snorby Database
+       mysql_db: name={{ mysql_snorby_db }} state=present
+
+     - name: Adds Snorby MySQL users
+       mysql_user: name={{ mysql_snorby_user }} password={{ mysql_snorby_password }} priv=*.*:ALL state=present

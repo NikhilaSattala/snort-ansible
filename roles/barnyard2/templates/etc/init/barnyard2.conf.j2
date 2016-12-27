@@ -1,0 +1,6 @@
+description "Barnyard2 service"
+stop on runlevel [!2345]
+start on runlevel [2345]
+script
+    exec /usr/local/bin/barnyard2 -c /etc/snort/barnyard2.conf -d /var/log/snort -f snort.u2 -w /var/log/snort/barnyard2.waldo -g snort -u snort -D -a /var/log/snort/archived_logs
+end script

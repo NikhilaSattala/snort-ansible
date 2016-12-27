@@ -1,0 +1,13 @@
+- hosts: snortserver
+  roles:
+#     - nic_config
+    - daq
+    - snort
+    - barnyard2
+    - pulledpork
+    - crontab
+    - mysql
+    - snorby
+    - passenger
+    - alerts
+    - supress_events

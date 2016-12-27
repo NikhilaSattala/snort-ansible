@@ -1,0 +1,6 @@
+    - name: Copy suppressSnortEvents.sh
+      become: yes
+      template:
+        src: ../templates/supressSnortEvents.sh.j2
+        dest: /root/supressSnortEvents.sh
+        mode: 0755

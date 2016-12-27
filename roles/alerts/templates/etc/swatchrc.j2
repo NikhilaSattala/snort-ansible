@@ -1,0 +1,13 @@
+# Swatch configuration file
+#
+#
+# swatch -c /etc/swatchrc -t /var/log/snort/alert
+#
+### Snort Alerts
+## Watch for entries containing the word 'Priority' in the snort alert file.
+## Display it in green on the screen
+## Mail alert to alerts@yourdomain.com with subject of the email
+## being "----Snort IDS Alert----"
+## Log in file /var/log/IDS-scans
+watchfor /Priority: 1/
+mail addresses=root,subject=--- CPT Snort IDS Alert ---
