@@ -49,23 +49,23 @@ ethtool -k eth0 | grep receive-offload`
 
 4]     Execute the ansible playbook using below command
           
-	   ansible-playbook -i hosts site.yml --ask-become-pass
+`ansible-playbook -i hosts site.yml --ask-become-pass
        
-	where, 
+where, 
        
-	site.yml file : containing the above mentioned roles
+site.yml file : containing the above mentioned roles
+      
+hosts file : specifies the localhost as snortserver
        
-	hosts file : specifies the localhost as snortserver
-       
-	--ask-become-pass to provide SUDO password of your localhost.
+--ask-become-pass to provide SUDO password of your localhost.`
           
 5]     After complete execution of playbook, login to the snorby GUI (https://localhost_ip) using the following credentials:
        
-	Email: snorby@snorby.org
+`Email: snorby@snorby.org
        
-	Password: snorby
+Password: snorby`
        
-	It takes a while for Barnyard2 service to update the Database and Snorby_worker to populate the events in GUI.
+  It takes a while for Barnyard2 service to update the Database and Snorby_worker to populate the events in GUI.
      
 Maintenance:
 ============
