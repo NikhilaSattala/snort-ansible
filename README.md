@@ -31,17 +31,17 @@ Deployment:
 
 Some network cards have features named “Large Receive Offload” (lro) and “Generic Receive Offload” (gro) which needs to turned off by following the below steps for Snort server:
 
-sudo apt-get install -y ethtool
+`sudo apt-get install -y ethtool`
 
 Append the following two lines for each network interface (making sure to change eth0 to match the interface you are working on, since your interface names may be different):
 
-post-up ethtool -K eth0 gro off
+`post-up ethtool -K eth0 gro off`
 
-post-up ethtool -K eth0 lro off
+`post-up ethtool -K eth0 lro off`
 
-sudo ifconfig eth0 down && sudo ifconfig eth0 up
+`sudo ifconfig eth0 down && sudo ifconfig eth0 up
 
-ethtool -k eth0 | grep receive-offload
+ethtool -k eth0 | grep receive-offload`
 
 [These steps are also automated using nic_config role in the ansible, but will loose network connectivity to the server(as eth0 will be made down) and requires to reconnect to the server to execute the ansible playbook with the other roles] 
 
